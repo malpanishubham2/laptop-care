@@ -343,7 +343,7 @@ export async function startServer() {
   const agentMd = await readFile(agentMdPath, "utf-8");
 
   const server = new McpServer(
-    { name: "laptop-care", version: "0.5.1" },
+    { name: "laptop-care", version: "0.6.0" },
     { instructions: agentMd }
   );
 
