@@ -60,7 +60,7 @@ switch (command) {
     });
     break;
   case "help":
-    console.log("laptop-care — cross-platform laptop maintenance AI agent");
+    console.log("laptop-care: cross-platform laptop maintenance agent");
     console.log("");
     console.log("Commands:");
     console.log("  npx laptop-care setup     Add to Claude Desktop config automatically");

@@ -1,8 +1,8 @@
 # laptop-care
 
-Cross-platform laptop maintenance AI agent. Checks your laptop's health, cleans up junk, tracks trends over time, and recommends actions — all through Claude Desktop.
+Cross-platform laptop maintenance agent that runs inside Claude Desktop. Checks disk, battery, SSD, security, and more. Cleans up junk. Tracks trends over time.
 
-**Works on macOS and Windows. No API key needed — uses your Claude Desktop subscription.**
+Works on macOS and Windows. No API key needed, uses your Claude Desktop subscription.
 
 ## What it checks
 
@@ -21,32 +21,32 @@ Cross-platform laptop maintenance AI agent. Checks your laptop's health, cleans 
 | Backup status | Time Machine / Windows Backup |
 | System integrity | SFC/DISM (Windows), Disk Utility (Mac) |
 
-## Install (one command)
+## Install
 
 ```bash
 npx laptop-care setup
 ```
 
-This automatically adds laptop-care to your Claude Desktop config. Then:
+This adds laptop-care to your Claude Desktop config automatically. Then:
 
 1. Restart Claude Desktop
-2. Say: **"run my laptop maintenance"**
+2. Say: "run my laptop maintenance"
 
-That's it. laptop-care will introduce itself, run a health check, and walk you through what it finds.
+laptop-care introduces itself, runs a health check, and walks you through what it finds.
 
 ## How it works
 
-laptop-care is an [MCP server](https://modelcontextprotocol.io/) — it provides system maintenance tools that Claude uses to check your laptop. Claude handles the reasoning: interpreting results, comparing with past checks, deciding what to recommend.
+laptop-care is an [MCP server](https://modelcontextprotocol.io/). It gives Claude a set of system maintenance tools (disk check, battery check, cleanup, etc.). Claude does the thinking: reads the results, compares with past runs, decides what to recommend.
 
-- **Safe checks run automatically** (disk, battery, SSD, security — read-only)
-- **Cleanup actions ask first** (temp files, cache clearing)
-- **Deep checks warn you** (system integrity — takes 5-10 min, needs admin)
+- Safe checks (disk, battery, SSD, security) run automatically. They're read-only.
+- Cleanup actions (temp files, trash) ask before running.
+- Deep checks (system integrity) warn you about the time commitment and need admin.
 
-Health data is saved to `~/.laptop-care/health.csv` so Claude can track trends across runs.
+Health data goes to `~/.laptop-care/health.csv` so Claude can compare across runs.
 
 ## Manual setup
 
-If the auto-setup doesn't work, add this to your Claude Desktop config (`claude_desktop_config.json`):
+If auto-setup doesn't work, add this to your Claude Desktop config (`claude_desktop_config.json`):
 
 ```json
 {
@@ -60,8 +60,8 @@ If the auto-setup doesn't work, add this to your Claude Desktop config (`claude_
 ```
 
 Config file location:
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
 
 ## For Claude Code users
 
@@ -71,7 +71,7 @@ claude mcp add laptop-care -- npx -y laptop-care
 
 ## Scheduling
 
-During your first run, laptop-care will offer to set up automatic recurring checks (weekly, monthly, or quarterly). You can also set this up anytime by saying "schedule my maintenance checks" in Claude Desktop.
+On your first run, laptop-care offers to set up automatic recurring checks (weekly, monthly, or quarterly). You can also set this up anytime by saying "schedule my maintenance checks" in Claude Desktop.
 
 ## Requirements
 

@@ -28,7 +28,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: "temp_files_scan",
-    description: "[AUTO-SAFE] Scan temporary file directories and caches — report sizes only, does NOT delete anything.",
+    description: "[AUTO-SAFE] Scan temporary file directories and caches. Reports sizes only, does NOT delete anything.",
     schema: EMPTY,
   },
   {
@@ -93,7 +93,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: "system_integrity_check",
-    description: "[ADMIN] Run system file integrity check — SFC on Windows, Disk Utility verify on Mac. Takes 5-10 minutes. Requires admin/elevated privileges on Windows. Warn the user about the time commitment before running.",
+    description: "[ADMIN] Run system file integrity check. SFC on Windows, Disk Utility verify on Mac. Takes 5-10 minutes. Requires admin/elevated privileges on Windows. Warn the user about the time commitment before running.",
     schema: EMPTY,
   },
   {

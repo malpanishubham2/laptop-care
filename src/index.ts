@@ -204,24 +204,24 @@ export async function startServer() {
   });
 
   // Register MCP prompts for Claude Desktop prompt picker
-  server.prompt("run-maintenance", "Run a full laptop health check — scans disk, battery, SSD, security, and more, then recommends fixes", async () => ({
+  server.prompt("run-maintenance", "Run a full laptop health check. Scans disk, battery, SSD, security, and more, then recommends fixes", async () => ({
     messages: [{
       role: "user" as const,
       content: { type: "text" as const, text: "Run my full laptop maintenance check. Start by reading the laptop-care agent prompt resource for instructions, then check for any pending issues from last time, and run all the health checks. Give me a detailed report with your recommendations and save everything." },
     }],
   }));
 
-  server.prompt("quick-check", "Quick 2-minute laptop health snapshot — just the essentials", async () => ({
+  server.prompt("quick-check", "Quick 2-minute laptop health snapshot, just the essentials", async () => ({
     messages: [{
       role: "user" as const,
-      content: { type: "text" as const, text: "Do a quick laptop health check — just disk space, battery, and security status. Keep it brief, flag anything that needs attention." },
+      content: { type: "text" as const, text: "Do a quick laptop health check, just disk space, battery, and security status. Keep it brief, flag anything that needs attention." },
     }],
   }));
 
   server.prompt("show-trends", "Show health trends over time from past maintenance runs", async () => ({
     messages: [{
       role: "user" as const,
-      content: { type: "text" as const, text: "Show me my laptop health trends over time. Read the health history and any pending issues, then give me a summary of how things are trending — what's improving, what's getting worse, and what needs attention." },
+      content: { type: "text" as const, text: "Show me my laptop health trends over time. Read the health history and any pending issues, then give me a summary of how things are trending, what's improving, what's getting worse, and what needs attention." },
     }],
   }));
 
