@@ -84,7 +84,21 @@ async function handleReadHistory(): Promise<string> {
 
 async function handleSaveReport(params: Record<string, unknown>): Promise<string> {
   await ensureDataDir();
-  const filename = (params.filename as string) || `${new Date().toISOString().split("T")[0]}.md`;
+
+  let filename = params.filename as string | undefined;
+  if (!filename) {
+    const now = new Date();
+    const date = now.toISOString().split("T")[0];
+    filename = `${date}.md`;
+    // A second run on the same day must not silently destroy the first
+    // report, so fall back to a time-stamped name once the date is taken.
+    if (existsSync(join(REPORTS_DIR, filename))) {
+      const hh = String(now.getHours()).padStart(2, "0");
+      const mm = String(now.getMinutes()).padStart(2, "0");
+      filename = `${date}-${hh}${mm}.md`;
+    }
+  }
+
   const filepath = join(REPORTS_DIR, filename);
   await writeFile(filepath, params.content as string);
   return JSON.stringify({ status: "saved", path: filepath, filename });
@@ -329,7 +343,7 @@ export async function startServer() {
   const agentMd = await readFile(agentMdPath, "utf-8");
 
   const server = new McpServer(
-    { name: "laptop-care", version: "0.5.0" },
+    { name: "laptop-care", version: "0.5.1" },
     { instructions: agentMd }
   );
 
