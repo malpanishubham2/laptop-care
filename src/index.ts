@@ -166,10 +166,29 @@ const CUSTOM_HANDLERS: Record<string, (params: Record<string, unknown>) => Promi
 };
 
 export async function startServer() {
-  const server = new McpServer({
-    name: "laptop-care",
-    version: "0.2.0",
-  });
+  // AGENT.md is the single source of truth for agent behavior. It is delivered
+  // three ways so the model always has it: server instructions (pushed on
+  // connect), the start_maintenance tool, and a readable resource.
+  const agentMdPath = join(__dirname, "..", "AGENT.md");
+  const agentMd = await readFile(agentMdPath, "utf-8");
+
+  const server = new McpServer(
+    { name: "laptop-care", version: "0.3.0" },
+    { instructions: agentMd }
+  );
+
+  // Safety net: if the client ignores server instructions, this tool hands the
+  // model the full playbook. Its description steers the model here first.
+  server.tool(
+    "start_maintenance",
+    "[AUTO-SAFE] ALWAYS CALL THIS FIRST when the user mentions laptop maintenance, a health check, a checkup, cleaning up their machine, or anything about how their laptop is doing. Returns the maintenance playbook you must follow: the onboarding flow for new users, the report format, escalation thresholds, and safety rules. Do not call any other laptop-care tool before this one.",
+    async () => ({
+      content: [{
+        type: "text" as const,
+        text: agentMd + "\n\n---\n\nYou have just loaded the laptop-care playbook. Follow it exactly. Begin now by calling read_health_history and get_pending_issues to determine whether this is a first run or a returning user, then proceed with the matching workflow above.",
+      }],
+    })
+  );
 
   for (const tool of TOOLS) {
     const handler = CUSTOM_HANDLERS[tool.name];
@@ -196,32 +215,40 @@ export async function startServer() {
     }
   }
 
-  // Expose AGENT.md as a resource
-  const agentMdPath = join(__dirname, "..", "AGENT.md");
-  server.resource("agent-prompt", "laptop-care://agent-prompt", async (uri) => {
-    const content = await readFile(agentMdPath, "utf-8");
-    return { contents: [{ uri: uri.href, text: content, mimeType: "text/markdown" }] };
-  });
+  // Expose AGENT.md as a readable resource too
+  server.resource("agent-prompt", "laptop-care://agent-prompt", async (uri) => ({
+    contents: [{ uri: uri.href, text: agentMd, mimeType: "text/markdown" }],
+  }));
 
-  // Register MCP prompts for Claude Desktop prompt picker
+  // Prompts carry the playbook inline so they work even if the client never
+  // surfaces server instructions or reads the resource.
   server.prompt("run-maintenance", "Run a full laptop health check. Scans disk, battery, SSD, security, and more, then recommends fixes", async () => ({
     messages: [{
       role: "user" as const,
-      content: { type: "text" as const, text: "Run my full laptop maintenance check. Start by reading the laptop-care agent prompt resource for instructions, then check for any pending issues from last time, and run all the health checks. Give me a detailed report with your recommendations and save everything." },
+      content: {
+        type: "text" as const,
+        text: `Run my full laptop maintenance check, following this playbook exactly:\n\n${agentMd}\n\n---\n\nStart now. Call read_health_history and get_pending_issues first to figure out if this is my first run or a follow-up, then run the matching workflow. Present the dashboard and your recommendations, act on what I approve, and save the report and issues at the end.`,
+      },
     }],
   }));
 
   server.prompt("quick-check", "Quick 2-minute laptop health snapshot, just the essentials", async () => ({
     messages: [{
       role: "user" as const,
-      content: { type: "text" as const, text: "Do a quick laptop health check, just disk space, battery, and security status. Keep it brief, flag anything that needs attention." },
+      content: {
+        type: "text" as const,
+        text: "Do a quick laptop health check using the laptop-care tools: disk space, battery, and security status only. Present it as a short status list, not raw command output. Flag anything that crosses these lines: disk under 20% free, battery wear over 40%, firewall off, or encryption off. Keep the whole thing under 10 lines. Skip saving a report.",
+      },
     }],
   }));
 
   server.prompt("show-trends", "Show health trends over time from past maintenance runs", async () => ({
     messages: [{
       role: "user" as const,
-      content: { type: "text" as const, text: "Show me my laptop health trends over time. Read the health history and any pending issues, then give me a summary of how things are trending, what's improving, what's getting worse, and what needs attention." },
+      content: {
+        type: "text" as const,
+        text: "Show me my laptop health trends. Call read_health_history and get_pending_issues, then give me a table comparing my most recent check against earlier ones, with the change for each metric. Call out what is getting worse, what is stable, and what still needs my attention. If there is only one recorded check, say so and tell me what you will be able to compare next time.",
+      },
     }],
   }));
 
