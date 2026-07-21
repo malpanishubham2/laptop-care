@@ -46,6 +46,74 @@ const LOCKED_RESPONSE = JSON.stringify({
     "This tool is locked because this is a first-time user who has not yet agreed to a scan. Do not retry and do not try another tool, they are all locked. Introduce laptop-care first: say what it reads, what it never touches without asking, and that all data stays on this machine. Then ask permission and wait for the user to answer. Once they agree, call grant_consent and continue.",
 });
 
+// --- Execution log ---
+// Records what actually ran this session so coverage claims come from real
+// execution rather than the model's recollection.
+
+const ran = new Map<string, { ok: boolean; at: number }>();
+
+function didRun(tool: string): boolean {
+  return ran.get(tool)?.ok === true;
+}
+
+// --- Sequencing gates ---
+// Turns "never clean without scanning first" from an instruction into a
+// precondition. The model cannot skip the scan even if it ignores the playbook.
+
+const REQUIRES: Record<string, { needs: string[]; why: string }> = {
+  temp_files_clean: {
+    needs: ["temp_files_scan"],
+    why: "Run temp_files_scan first and show the user what will be deleted. Deleting before showing them is not allowed.",
+  },
+  empty_trash: {
+    needs: ["temp_files_scan"],
+    why: "Run temp_files_scan first so you can tell the user how large the Trash is before emptying it.",
+  },
+  save_report: {
+    needs: ["disk_space"],
+    why: "Run the diagnostic before saving a report. A report with no scan behind it is fabricated.",
+  },
+  record_health: {
+    needs: ["disk_space"],
+    why: "Run the diagnostic before recording health metrics, otherwise the trend log gets values that were never measured.",
+  },
+};
+
+function unmetPrereq(tool: string): string | null {
+  const rule = REQUIRES[tool];
+  if (!rule) return null;
+  const missing = rule.needs.filter((n) => !didRun(n));
+  if (!missing.length) return null;
+  return JSON.stringify({
+    error: "PREREQUISITE_NOT_MET",
+    missing,
+    message: rule.why,
+  });
+}
+
+// --- Report card ---
+// The server owns which rows exist and whether each was genuinely checked.
+// The model supplies status and detail only for rows that actually ran, so it
+// cannot claim coverage it does not have or pad the tally.
+
+const CARD_ROWS: Array<{ category: string; label: string; tool: string }> = [
+  { category: "STORAGE", label: "Disk space", tool: "disk_space" },
+  { category: "STORAGE", label: "Largest folders", tool: "large_folders" },
+  { category: "STORAGE", label: "Cache and temp files", tool: "temp_files_scan" },
+  { category: "STORAGE", label: "Cache composition", tool: "cache_breakdown" },
+  { category: "POWER", label: "Battery health", tool: "battery_health" },
+  { category: "POWER", label: "Sleep and wake", tool: "sleep_wake_log" },
+  { category: "POWER", label: "Uptime", tool: "boot_time" },
+  { category: "HARDWARE", label: "SSD health", tool: "ssd_health" },
+  { category: "HARDWARE", label: "Firmware", tool: "firmware_check" },
+  { category: "SECURITY", label: "Firewall and Gatekeeper", tool: "security_status" },
+  { category: "SECURITY", label: "Disk encryption", tool: "encryption_status" },
+  { category: "SECURITY", label: "Startup agents", tool: "startup_items" },
+  { category: "SECURITY", label: "Persistence changes", tool: "check_persistence_changes" },
+  { category: "MAINTENANCE", label: "OS updates", tool: "os_update_check" },
+  { category: "MAINTENANCE", label: "Backup", tool: "backup_status" },
+];
+
 async function ensureDataDir() {
   if (!existsSync(DATA_DIR)) await mkdir(DATA_DIR, { recursive: true });
   if (!existsSync(REPORTS_DIR)) await mkdir(REPORTS_DIR, { recursive: true });
@@ -150,6 +218,44 @@ async function handleGrantConsent(params: Record<string, unknown>): Promise<stri
     status: "granted",
     message: "Diagnostic tools unlocked. Proceed with the full scan, then present the dashboard and recommendations and stop before changing anything.",
   });
+}
+
+// Builds the inspection card from the execution log rather than from the
+// model's memory of what it did. Coverage is a fact here, not a claim.
+async function handleBuildReportCard(): Promise<string> {
+  const rows = CARD_ROWS.map((r) => {
+    const rec = ran.get(r.tool);
+    if (rec?.ok) {
+      return { category: r.category, label: r.label, checked: true, status: null, detail: null };
+    }
+    return {
+      category: r.category,
+      label: r.label,
+      checked: false,
+      status: "Not checked",
+      detail: rec ? "The check ran but failed." : "This check was not run.",
+    };
+  });
+
+  const completed = rows.filter((r) => r.checked).length;
+  const isFirstRun = !existsSync(CSV_PATH);
+
+  return JSON.stringify({
+    total_points: CARD_ROWS.length,
+    checks_completed: completed,
+    checks_missing: CARD_ROWS.length - completed,
+    first_run: isFirstRun,
+    rows,
+    how_to_use: [
+      "These rows are generated from what actually executed this session. Do not add rows, remove rows, or change any row where checked is false.",
+      "For each row where checked is true, fill in status and detail yourself. Status must be exactly one of: Good, Watch, Action, Ask, Baseline.",
+      "Rows already marked 'Not checked' stay that way. Show them. A missing check is information the user is entitled to.",
+      "Render as aligned columns grouped by category, with the tally underneath.",
+      isFirstRun
+        ? "This is a first run, so show the full card."
+        : "This is a returning user. Prefer the compact three section summary and lead with what changed, unless they ask for the full card.",
+    ],
+  }, null, 2);
 }
 
 // Compares each metric against this machine's own history rather than against
@@ -333,6 +439,7 @@ const CUSTOM_HANDLERS: Record<string, (params: Record<string, unknown>) => Promi
   grant_consent: handleGrantConsent,
   analyze_trends: () => handleAnalyzeTrends(),
   check_persistence_changes: () => handlePersistenceChanges(),
+  build_report_card: () => handleBuildReportCard(),
 };
 
 export async function startServer() {
@@ -343,7 +450,7 @@ export async function startServer() {
   const agentMd = await readFile(agentMdPath, "utf-8");
 
   const server = new McpServer(
-    { name: "laptop-care", version: "0.7.0" },
+    { name: "laptop-care", version: "0.8.0" },
     { instructions: agentMd }
   );
 
@@ -364,9 +471,26 @@ export async function startServer() {
     const handler = CUSTOM_HANDLERS[tool.name];
     const hasParams = Object.keys(tool.schema).length > 0;
 
-    // Every tool routes through the consent interlock first.
-    const guard = async (run: () => Promise<string>): Promise<string> =>
-      isLocked(tool.name) ? LOCKED_RESPONSE : await run();
+    // Every tool routes through the consent interlock, then the sequencing
+    // gates, then gets recorded in the execution log.
+    const guard = async (run: () => Promise<string>): Promise<string> => {
+      if (isLocked(tool.name)) return LOCKED_RESPONSE;
+
+      const blocked = unmetPrereq(tool.name);
+      if (blocked) return blocked;
+
+      try {
+        const out = await run();
+        // A command that returned a JSON error object did not really succeed,
+        // so the report card must not count it as a completed check.
+        const failed = out.trimStart().startsWith("{") && out.includes('"error"');
+        ran.set(tool.name, { ok: !failed, at: Date.now() });
+        return out;
+      } catch (e) {
+        ran.set(tool.name, { ok: false, at: Date.now() });
+        throw e;
+      }
+    };
 
     if (handler) {
       if (hasParams) {

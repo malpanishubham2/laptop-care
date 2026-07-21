@@ -19,6 +19,11 @@ export const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "build_report_card",
+    description: "[AUTO-SAFE] Generate the inspection report scaffold after finishing a diagnostic. Returns one row per check with a server-verified record of whether that check actually ran, plus the accurate tally. Call this before presenting results. You fill in the status and detail for rows that ran; you may not add rows, delete rows, or overwrite rows already marked 'Not checked'. Coverage comes from this tool, not from your own recollection of what you called.",
+    schema: EMPTY,
+  },
+  {
     name: "analyze_trends",
     description: "[AUTO-SAFE] Compare the latest health check against this machine's own history and flag values that moved abnormally FOR THIS USER, rather than against generic thresholds. Use this on every returning run. It reports each metric's change since last check, the typical change for this machine, and marks anything moving faster than usual.",
     schema: EMPTY,
