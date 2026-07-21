@@ -1,20 +1,35 @@
 {
   "name": "laptop-care",
   "version": "0.2.0",
-  "description": "Cross-platform laptop maintenance AI agent — MCP server for Claude Desktop",
+  "description": "Cross-platform laptop maintenance agent (MCP server) for Claude Desktop",
   "type": "module",
   "bin": {
     "laptop-care": "dist/cli.js"
   },
   "main": "dist/index.js",
+  "files": [
+    "dist",
+    "AGENT.md",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "start": "node dist/cli.js"
+    "start": "node dist/cli.js",
+    "prepublishOnly": "npm run build"
   },
   "keywords": ["mcp", "maintenance", "laptop", "agent", "claude", "system-health"],
   "author": "Shubham Malpani",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/malpanishubham2/laptop-care.git"
+  },
+  "homepage": "https://github.com/malpanishubham2/laptop-care#readme",
+  "bugs": {
+    "url": "https://github.com/malpanishubham2/laptop-care/issues"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.15.0"
   },
