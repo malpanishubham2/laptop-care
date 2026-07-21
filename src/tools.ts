@@ -124,4 +124,54 @@ export const TOOLS: ToolDef[] = [
       frequency: z.enum(["weekly", "monthly", "quarterly"]).describe("How often to run maintenance"),
     },
   },
+  {
+    name: "save_report",
+    description: "[AUTO-SAFE] Save a maintenance report to ~/.laptop-care/reports/. Call this at the end of every maintenance run with the full markdown report. Returns the file path.",
+    schema: {
+      content: z.string().describe("Full markdown report content"),
+      filename: z.string().optional().describe("Custom filename (default: YYYY-MM-DD.md)"),
+    },
+  },
+  {
+    name: "list_reports",
+    description: "[AUTO-SAFE] List all saved maintenance reports with dates. Useful for reviewing past reports or finding a specific one.",
+    schema: EMPTY,
+  },
+  {
+    name: "get_report",
+    description: "[AUTO-SAFE] Read a previously saved maintenance report by filename.",
+    schema: {
+      filename: z.string().describe("Report filename (e.g. 2026-07-21.md)"),
+    },
+  },
+  {
+    name: "save_issues",
+    description: "[AUTO-SAFE] Save the list of issues found during a maintenance run. Tracks which issues are new, fixed, or still pending. Call after presenting findings to the user.",
+    schema: {
+      issues: z.array(z.object({
+        id: z.string().describe("Short unique ID like 'disk-low' or 'battery-wear'"),
+        severity: z.enum(["critical", "warning", "info"]),
+        title: z.string().describe("Short title like 'Disk space low'"),
+        detail: z.string().describe("What was found"),
+        recommendation: z.string().describe("What Claude recommends"),
+        fixable: z.boolean().describe("Whether laptop-care can fix this automatically"),
+        status: z.enum(["open", "fixed", "skipped", "user-action-needed"]),
+      })).describe("Array of issues found"),
+    },
+  },
+  {
+    name: "get_pending_issues",
+    description: "[AUTO-SAFE] Get unresolved issues from the last maintenance run. Shows what was skipped or still needs attention. Use at the start of a new run to follow up.",
+    schema: EMPTY,
+  },
+  {
+    name: "empty_trash",
+    description: "[ASK-FIRST] Empty the Trash (Mac) or Recycle Bin (Windows). Show the user the trash size first and confirm before running.",
+    schema: EMPTY,
+  },
+  {
+    name: "flush_dns",
+    description: "[ASK-FIRST] Clear the DNS resolver cache. Safe but may briefly slow DNS lookups. Useful if the user reports connectivity issues.",
+    schema: EMPTY,
+  },
 ];

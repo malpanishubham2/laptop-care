@@ -90,6 +90,16 @@ export const COMMANDS: Record<string, CommandEntry> = {
     darwin: `diskutil verifyVolume / 2>&1`,
     win32: `powershell -NoProfile -Command "sfc /scannow 2>&1 | Select-String -Pattern 'Windows Resource Protection|found|could not'"`,
   },
+
+  empty_trash: {
+    darwin: `osascript -e 'tell application "Finder" to empty trash' 2>&1 && echo '{"status":"emptied"}'`,
+    win32: `powershell -NoProfile -Command "Clear-RecycleBin -Force -ErrorAction SilentlyContinue; Write-Output '{\"status\":\"emptied\"}';"`,
+  },
+
+  flush_dns: {
+    darwin: `sudo dscacheutil -flushcache 2>/dev/null; sudo killall -HUP mDNSResponder 2>/dev/null; echo '{"status":"flushed"}'`,
+    win32: `powershell -NoProfile -Command "ipconfig /flushdns"`,
+  },
 };
 
 export function getCommand(toolName: string): string | null {
