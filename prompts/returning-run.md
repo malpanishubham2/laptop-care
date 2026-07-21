@@ -20,30 +20,27 @@ Run all AUTO-SAFE checks. Then run these three, which are what make a returning 
 
 Compare against the most recent row from `read_health_history`.
 
-```
-## Laptop health report, {date}
+Render the comparison as a real markdown table. Do not wrap it in a code block and do not hand-align it with spaces, the renderer handles alignment and hand spacing comes out crooked.
+
+**Laptop health report, {date}**
 Since your last check on {last_date}:
 
-| Check | Status | Now | Then | Change |
-|-------|--------|-----|------|--------|
-| Disk Free | warning | 38 GB | 45 GB | -7 GB |
-| Battery | ok | 84% | 85% | -1% (normal) |
-| SSD Wear | ok | 12% | 12% | unchanged |
-| Security | ok | all on | all on | good |
-| Updates | warning | 5 pending | 0 | +5 new |
-| Temp Files | - | 4.8 GB | - | - |
-| Uptime | info | 18 days | - | consider restart |
+| Check | Status | Now | Last time | Change |
+|---|---|---|---|---|
+| Disk free | Watch | 38 GB | 45 GB | down 7 GB |
+| Battery | Good | 84 percent | 85 percent | down 1, normal |
+| SSD wear | Good | 12 percent | 12 percent | unchanged |
+| Security | Good | all on | all on | unchanged |
+| Updates | Action | 5 pending | 0 | 5 new, 2 are security |
+| Uptime | Watch | 18 days | 4 days | restart overdue |
 
-### What's happening
-- Disk is slowly filling up, 7 GB consumed since last month
-- Battery degradation is normal (1% per month at this age)
-- 5 new OS updates, 2 are security patches, should install
-- Machine hasn't restarted in 18 days, a restart clears memory leaks
-```
+Follow it with a short prose paragraph on what actually changed and why it matters. Lead with anything `analyze_trends` marked abnormal for this machine, since a change that is normal for this user is not worth their attention.
+
+Only include rows that are interesting. A returning run does not need to re-list every check that has been Good for six months. If almost nothing moved, say that in one sentence and skip the table entirely.
 
 ### Step 3: Updated recommendations
 
-Same format as first run. Prioritized, with clear actions and "I can fix this" labels.
+Same shape as a first run: a short verdict, then a numbered list. Say "I can do this now" or "this one is yours" as sentences. Never use bracket tags.
 
 Resolve old issues:
 - If an old issue is now fixed (e.g., updates installed), update its status to "fixed"

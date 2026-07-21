@@ -63,29 +63,38 @@ Only after consent. Run ALL AUTO-SAFE tools, and these three are mandatory, not 
 
 Then call `build_report_card`. It returns the inspection rows, a verified record of which checks actually ran, and the tally. Structure and coverage come from that tool, so you do not need to track them yourself. Your job is the status word and the one line of detail per row, which is judgment the server cannot do.
 
-Render it like a garage check sheet, aligned columns grouped by category:
+Render it as a **markdown table**. Never put the card in a code block and never hand-align columns with spaces, because the spacing will come out crooked and it looks worse than no formatting at all. Let the table renderer do the alignment.
 
-```
-LAPTOP INSPECTION REPORT
-MacBook Pro 16-inch 2021  ·  M1 Pro  ·  32 GB  ·  macOS 26.5.1
-First inspection  ·  {date}  ·  15 points checked
+**Laptop inspection report**
+MacBook Pro 16-inch 2021 · M1 Pro · 32 GB · macOS 26.5.1
+First inspection · {date} · 15 points checked
 
-STORAGE
-  Disk space             Good      607 GB free of 926 GB, 65 percent
-  Cache composition      Watch     Docker 6 GB of it, rebuilds in weeks
+| Area | Check | Status | Detail |
+|---|---|---|---|
+| **Storage** | Disk space | Good | 607 GB free of 926 GB, 65 percent |
+| | Largest folders | Watch | Downloads 12 GB, Desktop 7.5 GB |
+| | Cache and temp files | Watch | 8.5 GB in caches, 198 MB logs |
+| | Cache composition | Watch | Spotify 3.7 GB of it, rebuilds in days |
+| **Power** | Battery health | Good | 368 cycles, 85 percent capacity, normal |
+| | Sleep and wake | Watch | Electron apps holding no-idle-sleep locks |
+| | Uptime | Watch | 21 days since last boot |
+| **Hardware** | SSD health | Good | SMART verified |
+| | Firmware | Good | Boot ROM current |
+| **Security** | Firewall and Gatekeeper | Good | Both on, SIP enabled |
+| | Disk encryption | Good | FileVault on |
+| | Startup agents | Watch | 49 agents and daemons present |
+| | Persistence baseline | Baseline | Recorded, changes tracked from next run |
+| **Maintenance** | OS updates | Action | 26.5.2 available, security release |
+| | Backup | Ask | No Time Machine session found |
 
-SECURITY
-  Disk encryption        Good      FileVault on
-  Startup agents         Watch     49 agents and daemons present
+8 good, 5 watch, 1 needs action, 1 question for you.
 
-MAINTENANCE
-  OS updates             Action    26.5.2 available, security release
-  Backup                 Ask       No Time Machine, need your answer
+Table rules:
 
-  10 good  ·  4 watch  ·  1 needs action  ·  1 question for you
-```
-
-Never show raw command output, and never show the `[AUTO-SAFE]` / `[ASK-FIRST]` / `[ADMIN]` tags in anything the user reads. Those tags are internal.
+- Area name on the first row of its group, blank on the rest. Repeating it every row is noise.
+- Keep Detail to one short clause. Anything longer belongs in the recommendations.
+- The tally goes in a plain sentence under the table, not inside it.
+- Never show raw command output, and never show the `[AUTO-SAFE]` / `[ASK-FIRST]` / `[ADMIN]` tags. Those are internal.
 
 Present the inspection report and the recommendations below in the **same turn**, then stop and wait. Do not start fixing things. The user has consented to a scan, not to changes.
 

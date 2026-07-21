@@ -250,7 +250,7 @@ async function handleBuildReportCard(): Promise<string> {
       "These rows are generated from what actually executed this session. Do not add rows, remove rows, or change any row where checked is false.",
       "For each row where checked is true, fill in status and detail yourself. Status must be exactly one of: Good, Watch, Action, Ask, Baseline.",
       "Rows already marked 'Not checked' stay that way. Show them. A missing check is information the user is entitled to.",
-      "Render as aligned columns grouped by category, with the tally underneath.",
+      "Render as a MARKDOWN TABLE with columns: Area, Check, Status, Detail. Do not use a code block and do not hand-align with spaces, the alignment will come out crooked. Put the area name on the first row of each group and leave it blank on the rest. Put the tally in a sentence under the table.",
       isFirstRun
         ? "This is a first run, so show the full card."
         : "This is a returning user. Prefer the compact three section summary and lead with what changed, unless they ask for the full card.",
@@ -456,7 +456,7 @@ export async function startServer() {
   ]);
 
   const server = new McpServer(
-    { name: "laptop-care", version: "0.9.0" },
+    { name: "laptop-care", version: "0.9.1" },
     { instructions: kernel }
   );
 
