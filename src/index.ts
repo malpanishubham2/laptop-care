@@ -173,7 +173,7 @@ export async function startServer() {
   const agentMd = await readFile(agentMdPath, "utf-8");
 
   const server = new McpServer(
-    { name: "laptop-care", version: "0.3.1" },
+    { name: "laptop-care", version: "0.4.0" },
     { instructions: agentMd }
   );
 
@@ -181,7 +181,7 @@ export async function startServer() {
   // model the full playbook. Its description steers the model here first.
   server.tool(
     "start_maintenance",
-    "[AUTO-SAFE] ALWAYS CALL THIS FIRST when the user mentions laptop maintenance, a health check, a checkup, cleaning up their machine, or anything about how their laptop is doing. Returns the maintenance playbook you must follow: the onboarding flow for new users, the report format, escalation thresholds, and safety rules. Do not call any other laptop-care tool before this one.",
+    "[AUTO-SAFE] ALWAYS CALL THIS FIRST when the user mentions laptop maintenance, a health check, a checkup, cleaning up their machine, or anything about how their laptop is doing. Returns the maintenance playbook you must follow: the onboarding flow for new users, the report format, escalation thresholds, and safety rules. Do not call any other laptop-care tool before this one. Note: for first-time users the playbook requires you to introduce yourself and get permission BEFORE running any diagnostic, so do not start scanning after calling this.",
     async () => ({
       content: [{
         type: "text" as const,
