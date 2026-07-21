@@ -443,28 +443,40 @@ const CUSTOM_HANDLERS: Record<string, (params: Record<string, unknown>) => Promi
 };
 
 export async function startServer() {
-  // AGENT.md is the single source of truth for agent behavior. It is delivered
-  // three ways so the model always has it: server instructions (pushed on
-  // connect), the start_maintenance tool, and a readable resource.
-  const agentMdPath = join(__dirname, "..", "AGENT.md");
-  const agentMd = await readFile(agentMdPath, "utf-8");
+  // The playbook is split by lifecycle stage rather than by topic, because a
+  // returning user never needs the onboarding workflow and vice versa. Only the
+  // kernel is pushed on connect. start_maintenance decides in code which
+  // workflow to hand over, so nobody loads instructions they cannot use.
+  const promptDir = join(__dirname, "..", "prompts");
+  const [kernel, shared, firstRun, returningRun] = await Promise.all([
+    readFile(join(promptDir, "kernel.md"), "utf-8"),
+    readFile(join(promptDir, "shared.md"), "utf-8"),
+    readFile(join(promptDir, "first-run.md"), "utf-8"),
+    readFile(join(promptDir, "returning-run.md"), "utf-8"),
+  ]);
 
   const server = new McpServer(
-    { name: "laptop-care", version: "0.8.0" },
-    { instructions: agentMd }
+    { name: "laptop-care", version: "0.9.0" },
+    { instructions: kernel }
   );
 
-  // Safety net: if the client ignores server instructions, this tool hands the
-  // model the full playbook. Its description steers the model here first.
   server.tool(
     "start_maintenance",
-    "[AUTO-SAFE] ALWAYS CALL THIS FIRST when the user mentions laptop maintenance, a health check, a checkup, cleaning up their machine, or anything about how their laptop is doing. Returns the maintenance playbook you must follow: the onboarding flow for new users, the report format, escalation thresholds, and safety rules. Do not call any other laptop-care tool before this one. Note: for first-time users the playbook requires you to introduce yourself and get permission BEFORE running any diagnostic, so do not start scanning after calling this.",
-    async () => ({
-      content: [{
-        type: "text" as const,
-        text: agentMd + "\n\n---\n\nYou have just loaded the laptop-care playbook. Follow it exactly. Begin now by calling read_health_history and get_pending_issues to determine whether this is a first run or a returning user, then proceed with the matching workflow above.",
-      }],
-    })
+    "[AUTO-SAFE] ALWAYS CALL THIS FIRST when the user mentions laptop maintenance, a health check, a checkup, cleaning up their machine, or anything about how their laptop is doing. Returns the workflow for this specific user, either first-time onboarding or a returning follow-up, plus the judgment and formatting rules. Do not call any other laptop-care tool before this one. For first-time users the workflow requires you to introduce yourself and get permission BEFORE running any diagnostic, so do not start scanning after calling this.",
+    async () => {
+      const isFirstRun = !existsSync(CSV_PATH);
+      const workflow = isFirstRun ? firstRun : returningRun;
+      const closing = isFirstRun
+        ? "This is a FIRST RUN. This person has never used laptop-care. Follow the first-run workflow above exactly, including the stop after your introduction. Do not scan before they agree, and the scanning tools are locked until you call grant_consent, so attempting it will simply fail."
+        : "This is a RETURNING user, so skip the introduction and consent step, they have already been through it. Start with get_pending_issues to pick up anything left open last time, then run the diagnostic and lead with what changed.";
+
+      return {
+        content: [{
+          type: "text" as const,
+          text: `${workflow}\n\n---\n\n${shared}\n\n---\n\n${closing}`,
+        }],
+      };
+    }
   );
 
   for (const tool of TOOLS) {
@@ -516,19 +528,24 @@ export async function startServer() {
     }
   }
 
-  // Expose AGENT.md as a readable resource too
+  // The full playbook stays readable as a resource for inspection, assembled
+  // from the same files the server uses. No second copy to drift.
   server.resource("agent-prompt", "laptop-care://agent-prompt", async (uri) => ({
-    contents: [{ uri: uri.href, text: agentMd, mimeType: "text/markdown" }],
+    contents: [{
+      uri: uri.href,
+      text: [kernel, firstRun, returningRun, shared].join("\n\n---\n\n"),
+      mimeType: "text/markdown",
+    }],
   }));
 
-  // Prompts carry the playbook inline so they work even if the client never
-  // surfaces server instructions or reads the resource.
+  // The prompt points at start_maintenance rather than inlining the playbook,
+  // so it picks up the right workflow for whoever runs it.
   server.prompt("run-maintenance", "Run a full laptop health check. Scans disk, battery, SSD, security, and more, then recommends fixes", async () => ({
     messages: [{
       role: "user" as const,
       content: {
         type: "text" as const,
-        text: `Run my full laptop maintenance check, following this playbook exactly:\n\n${agentMd}\n\n---\n\nStart now. Call read_health_history and get_pending_issues first to figure out if this is my first run or a follow-up, then run the matching workflow. Present the dashboard and your recommendations, act on what I approve, and save the report and issues at the end.`,
+        text: "Run my full laptop maintenance check. Call start_maintenance first to load the workflow, then follow it exactly: run the diagnostic, build the inspection report, give me your recommendations, act on what I approve, and save the report at the end.",
       },
     }],
   }));

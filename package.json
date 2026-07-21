@@ -1,6 +1,6 @@
 {
   "name": "laptop-care",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Cross-platform laptop maintenance agent (MCP server) for Claude Desktop",
   "type": "module",
   "bin": {
@@ -9,7 +9,7 @@
   "main": "dist/index.js",
   "files": [
     "dist",
-    "AGENT.md",
+    "prompts",
     "README.md",
     "LICENSE"
   ],
