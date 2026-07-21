@@ -22,7 +22,7 @@ export const COMMANDS: Record<string, CommandEntry> = {
   },
 
   temp_files_scan: {
-    darwin: `echo "=== User Caches ===" && du -sh ~/Library/Caches 2>/dev/null && echo "=== System Temp ===" && du -sh /tmp 2>/dev/null && echo "=== Logs ===" && du -sh ~/Library/Logs 2>/dev/null && echo "=== Homebrew Cache ===" && du -sh ~/Library/Caches/Homebrew 2>/dev/null`,
+    darwin: `{ echo "=== User Caches ==="; du -sh ~/Library/Caches 2>/dev/null || echo "(unreadable)"; echo "=== System Temp ==="; du -sh /tmp 2>/dev/null || echo "(unreadable)"; echo "=== Logs ==="; du -sh ~/Library/Logs 2>/dev/null || echo "(unreadable)"; echo "=== Trash ==="; du -sh ~/.Trash 2>/dev/null || echo "0B"; echo "=== Homebrew Cache ==="; du -sh ~/Library/Caches/Homebrew 2>/dev/null || echo "(none)"; }`,
     win32: `powershell -NoProfile -Command "$temp = (Get-ChildItem $env:TEMP -Recurse -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum); $winTemp = (Get-ChildItem 'C:\\Windows\\Temp' -Recurse -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum); [PSCustomObject]@{UserTempGB=[math]::Round($temp.Sum/1GB,2);UserTempFiles=$temp.Count;WinTempGB=[math]::Round($winTemp.Sum/1GB,2);WinTempFiles=$winTemp.Count} | ConvertTo-Json"`,
   },
 
@@ -92,7 +92,7 @@ export const COMMANDS: Record<string, CommandEntry> = {
   },
 
   empty_trash: {
-    darwin: `osascript -e 'tell application "Finder" to empty trash' 2>&1 && echo '{"status":"emptied"}'`,
+    darwin: `osascript -e 'tell application "Finder" to empty trash' >/dev/null 2>&1; echo '{"status":"emptied"}'`,
     win32: `powershell -NoProfile -Command "Clear-RecycleBin -Force -ErrorAction SilentlyContinue; Write-Output '{\"status\":\"emptied\"}';"`,
   },
 
