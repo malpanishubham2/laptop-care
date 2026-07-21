@@ -173,7 +173,7 @@ export async function startServer() {
   const agentMd = await readFile(agentMdPath, "utf-8");
 
   const server = new McpServer(
-    { name: "laptop-care", version: "0.3.0" },
+    { name: "laptop-care", version: "0.3.1" },
     { instructions: agentMd }
   );
 

@@ -62,7 +62,9 @@ export const COMMANDS: Record<string, CommandEntry> = {
   },
 
   startup_items: {
-    darwin: `osascript -e 'tell application "System Events" to get the name of every login item' 2>/dev/null; echo "=== Launch Agents ==="; ls ~/Library/LaunchAgents/ 2>/dev/null; echo "=== Global Launch Agents ==="; ls /Library/LaunchAgents/ 2>/dev/null`,
+    // Filesystem enumeration only. Deliberately avoids osascript/System Events,
+    // which triggers a macOS Automation permission prompt that blocks the run.
+    darwin: `{ echo "=== User Launch Agents (~/Library/LaunchAgents) ==="; ls -1 ~/Library/LaunchAgents/ 2>/dev/null | grep -v '^$' || echo "(none)"; echo "=== Global Launch Agents (/Library/LaunchAgents) ==="; ls -1 /Library/LaunchAgents/ 2>/dev/null | grep -v '^$' || echo "(none)"; echo "=== Global Launch Daemons (/Library/LaunchDaemons) ==="; ls -1 /Library/LaunchDaemons/ 2>/dev/null | grep -v '^$' || echo "(none)"; echo "=== Note ==="; echo "GUI login items are not listed here; they require System Settings > General > Login Items."; }`,
     win32: `powershell -NoProfile -Command "Get-CimInstance Win32_StartupCommand | Select-Object Name,Command,Location | ConvertTo-Json"`,
   },
 
@@ -92,7 +94,9 @@ export const COMMANDS: Record<string, CommandEntry> = {
   },
 
   empty_trash: {
-    darwin: `osascript -e 'tell application "Finder" to empty trash' >/dev/null 2>&1; echo '{"status":"emptied"}'`,
+    // Direct filesystem delete. osascript/Finder would trigger a macOS
+    // Automation permission prompt that blocks the run.
+    darwin: `before=$(du -sk ~/.Trash 2>/dev/null | cut -f1); rm -rf ~/.Trash/* ~/.Trash/.[!.]* 2>/dev/null; after=$(du -sk ~/.Trash 2>/dev/null | cut -f1); echo "{\\"status\\":\\"emptied\\",\\"freed_mb\\":$(( (\${before:-0} - \${after:-0}) / 1024 ))}"`,
     win32: `powershell -NoProfile -Command "Clear-RecycleBin -Force -ErrorAction SilentlyContinue; Write-Output '{\"status\":\"emptied\"}';"`,
   },
 
