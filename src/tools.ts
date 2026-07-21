@@ -12,6 +12,28 @@ const EMPTY = {} as ZodShape;
 
 export const TOOLS: ToolDef[] = [
   {
+    name: "grant_consent",
+    description: "[ASK-FIRST] Unlock the diagnostic tools for a first-time user. On a brand new install every scanning tool is locked and will refuse to run until this is called. Call it ONLY after you have introduced laptop-care to the user, told them what it reads and what it never touches, and they have explicitly agreed. Never call this preemptively or to get around a lock error. Returning users are unlocked automatically and do not need this.",
+    schema: {
+      user_agreed: z.boolean().describe("Set true only when the user has explicitly said yes to the scan in this conversation"),
+    },
+  },
+  {
+    name: "analyze_trends",
+    description: "[AUTO-SAFE] Compare the latest health check against this machine's own history and flag values that moved abnormally FOR THIS USER, rather than against generic thresholds. Use this on every returning run. It reports each metric's change since last check, the typical change for this machine, and marks anything moving faster than usual.",
+    schema: EMPTY,
+  },
+  {
+    name: "check_persistence_changes",
+    description: "[AUTO-SAFE] Security check. Compares the current set of launch agents and daemons against the snapshot from the last run and reports what was ADDED or REMOVED since. New background agents are the primary way malware and unwanted software persist on macOS, so anything added that the user does not recognize deserves attention. On first run this records a baseline. Run this on every check.",
+    schema: EMPTY,
+  },
+  {
+    name: "cache_breakdown",
+    description: "[AUTO-SAFE] Break down the cache directory by which application owns each chunk, largest first. Use this to explain WHY junk keeps coming back and name the specific culprits (Docker, Xcode, npm, browsers) instead of just reporting a total. Pair it with advice on capping the biggest offender permanently.",
+    schema: EMPTY,
+  },
+  {
     name: "system_info",
     description: "[AUTO-SAFE] Get basic system identification: model, OS, CPU, RAM. Always run this first to identify the machine.",
     schema: EMPTY,

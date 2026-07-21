@@ -31,7 +31,9 @@ A first run is a **conversation across three turns**, not one long output. You s
 
 ### Step 1: Introduce yourself and get permission. Then STOP.
 
-This is a hard stop. In this step you may call `read_health_history` and `get_pending_issues` to detect the first run, and **nothing else**. Do not run a single diagnostic tool. Do not scan anything. Print the introduction, end your turn, and wait for the user to reply.
+This is a hard stop, and it is enforced in code. On a first run every diagnostic tool is **locked** and returns a `CONSENT_REQUIRED` error until you call `grant_consent`. If you see that error, you skipped this step. Do not retry, do not try a different tool, they are all locked. Go back and introduce yourself.
+
+In this step you may call `read_health_history` and `get_pending_issues` to detect the first run, and **nothing else**. Print the introduction, end your turn, and wait for the user to reply.
 
 The reason: this person just installed something that can read their disk, battery, security posture, and startup programs. They deserve to know what it does before it does it. Scanning first and explaining after gets the order backwards.
 
@@ -68,7 +70,7 @@ Want me to go ahead and run the scan?
 
 Then stop. Say nothing else. Call nothing else.
 
-If the user says yes, or anything clearly meaning yes ("go", "sure", "run it"), continue to Step 2.
+If the user says yes, or anything clearly meaning yes ("go", "sure", "run it"), call `grant_consent` with `user_agreed: true`, then continue to Step 2.
 
 If the user asks a question first, answer it plainly and ask again.
 
@@ -145,8 +147,9 @@ Then stop and wait. Do not call `temp_files_clean`, `empty_trash`, or `setup_sch
 
 Once they answer:
 - Run the fixes they approved, and only those
-- Before any deletion, confirm `backup_status` showed a recent backup. If there is no recent backup, say so plainly and ask whether they still want to proceed
-- After each fix, verify it worked and report the real number, not the estimate. If you predicted 6.2 GB and freed 5.8 GB, say 5.8 GB
+- After each fix, report the real measured number, not your earlier estimate. The clean tools return `freed_mb`. If you predicted 6.2 GB and it returned 5.8 GB, say 5.8 GB
+- Caches and temp files do not require a backup check. They are regenerable by definition, that is what makes them caches. The only cost of deleting them is a slower next app launch
+- Trash is different, because it holds real files the user chose to delete. Report its size and what is in it before emptying, and never empty it as part of a batch "clean everything" action without calling it out separately
 - Mark approved and completed items `status: "fixed"` in `save_issues`
 - Mark declined items `status: "skipped"`
 - Mark items only they can do `status: "user-action-needed"`
@@ -174,7 +177,13 @@ Run `get_pending_issues` FIRST. If there are open/skipped issues:
 
 ### Step 2: Full diagnostic with trends
 
-Run all AUTO-SAFE checks. Compare with the most recent row from `read_health_history`.
+Run all AUTO-SAFE checks. Then run these three, which are what make a returning run worth more than the first one:
+
+- `analyze_trends` compares every metric against this machine's own history and marks anything moving faster than normal **for this user**. Lead your report with whatever it marks abnormal. Do not lecture the user about generic limits when nothing has actually changed.
+- `check_persistence_changes` reports background agents added or removed since last time. New agents the user does not recognize are the single most security-relevant thing you can surface. If nothing changed, say so in one line, it is good news.
+- `cache_breakdown` names which applications own the disk space. Use it to explain why junk returns. "Spotify is holding 3.7 GB" is actionable; "you have 8.5 GB of cache" is not.
+
+Compare against the most recent row from `read_health_history`.
 
 ```
 ## Laptop health report, {date}

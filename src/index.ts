@@ -14,7 +14,37 @@ const DATA_DIR = join(homedir(), ".laptop-care");
 const CSV_PATH = join(DATA_DIR, "health.csv");
 const REPORTS_DIR = join(DATA_DIR, "reports");
 const ISSUES_PATH = join(DATA_DIR, "issues.json");
+const PERSIST_PATH = join(DATA_DIR, "persistence.json");
 const CSV_HEADER = "date,platform,disk_free_gb,disk_total_gb,battery_wear_pct,battery_cycles,ssd_health,firewall_on,encryption_on,pending_updates,uptime_days,is_deep_check";
+
+// --- Consent interlock ---
+// On a brand new install the scanning tools are locked in code, not just by
+// instructions. The model cannot scan before onboarding the user even if it
+// ignores the playbook. Returning users are unlocked automatically, since an
+// existing health.csv is proof they consented on a previous run.
+
+let consentGranted = false;
+
+const CONSENT_EXEMPT = new Set([
+  "start_maintenance",
+  "grant_consent",
+  "read_health_history",
+  "get_pending_issues",
+  "list_reports",
+  "get_report",
+]);
+
+function isLocked(toolName: string): boolean {
+  if (CONSENT_EXEMPT.has(toolName)) return false;
+  if (consentGranted) return false;
+  return !existsSync(CSV_PATH);
+}
+
+const LOCKED_RESPONSE = JSON.stringify({
+  error: "CONSENT_REQUIRED",
+  message:
+    "This tool is locked because this is a first-time user who has not yet agreed to a scan. Do not retry and do not try another tool, they are all locked. Introduce laptop-care first: say what it reads, what it never touches without asking, and that all data stays on this machine. Then ask permission and wait for the user to answer. Once they agree, call grant_consent and continue.",
+});
 
 async function ensureDataDir() {
   if (!existsSync(DATA_DIR)) await mkdir(DATA_DIR, { recursive: true });
@@ -94,6 +124,129 @@ async function handleGetPendingIssues(): Promise<string> {
   return JSON.stringify({ last_updated: data.last_updated, pending, total: data.issues.length });
 }
 
+async function handleGrantConsent(params: Record<string, unknown>): Promise<string> {
+  if (params.user_agreed !== true) {
+    return JSON.stringify({
+      status: "not_granted",
+      message: "user_agreed was not true. Ask the user for permission and wait for a clear yes before calling this again.",
+    });
+  }
+  consentGranted = true;
+  return JSON.stringify({
+    status: "granted",
+    message: "Diagnostic tools unlocked. Proceed with the full scan, then present the dashboard and recommendations and stop before changing anything.",
+  });
+}
+
+// Compares each metric against this machine's own history rather than against
+// invented global thresholds. A 7 GB drop is only meaningful next to what this
+// machine normally does.
+async function handleAnalyzeTrends(): Promise<string> {
+  await ensureDataDir();
+  if (!existsSync(CSV_PATH)) {
+    return JSON.stringify({ status: "no_history", message: "No history yet. Baselines start after the first recorded check." });
+  }
+  const lines = (await readFile(CSV_PATH, "utf-8")).trim().split("\n");
+  if (lines.length < 3) {
+    return JSON.stringify({
+      status: "insufficient_history",
+      checks_recorded: Math.max(0, lines.length - 1),
+      message: "Need at least 2 recorded checks to compare, and about 4 before typical movement is meaningful. Report current values plainly and say trends begin next run.",
+    });
+  }
+
+  const header = lines[0].split(",");
+  const rows = lines.slice(1).map((l) => l.split(","));
+  const numeric = ["disk_free_gb", "battery_wear_pct", "battery_cycles", "pending_updates", "uptime_days"];
+  const latest = rows[rows.length - 1];
+  const previous = rows[rows.length - 2];
+
+  const metrics = numeric.map((name) => {
+    const i = header.indexOf(name);
+    if (i === -1) return null;
+    const cur = parseFloat(latest[i]);
+    const prev = parseFloat(previous[i]);
+    if (isNaN(cur) || isNaN(prev)) return null;
+
+    const deltas: number[] = [];
+    for (let r = 1; r < rows.length; r++) {
+      const a = parseFloat(rows[r - 1][i]);
+      const b = parseFloat(rows[r][i]);
+      if (!isNaN(a) && !isNaN(b)) deltas.push(b - a);
+    }
+    const change = cur - prev;
+    // Baseline must exclude the change being tested. Including it lets a large
+    // jump inflate the very number it is compared against, hiding the anomaly.
+    const priorMagnitudes = deltas.slice(0, -1).map(Math.abs);
+    const typical = priorMagnitudes.length
+      ? priorMagnitudes.reduce((s, v) => s + v, 0) / priorMagnitudes.length
+      : 0;
+    // 2x prior norm, with an absolute floor so tiny counters do not cry wolf.
+    const abnormal = typical > 0 && Math.abs(change) > typical * 2 && Math.abs(change) > 1;
+
+    return {
+      metric: name,
+      current: cur,
+      previous: prev,
+      change: Number(change.toFixed(2)),
+      typical_change_for_this_machine: Number(typical.toFixed(2)),
+      abnormal,
+      note: abnormal
+        ? `Moved ${Math.abs(change).toFixed(1)} versus a typical ${typical.toFixed(1)} for this machine. Worth explaining to the user.`
+        : "Within normal range for this machine.",
+    };
+  }).filter(Boolean);
+
+  return JSON.stringify({
+    status: "ok",
+    checks_recorded: rows.length,
+    comparing: { from: previous[0], to: latest[0] },
+    metrics,
+    guidance: "Lead with anything marked abnormal. Describe changes relative to this machine's own pattern, not generic limits.",
+  }, null, 2);
+}
+
+// Change detection on the macOS/Windows persistence layer. What is new since
+// last run matters far more than the full inventory.
+async function handlePersistenceChanges(): Promise<string> {
+  await ensureDataDir();
+  const cmd = getCommand("startup_items");
+  if (!cmd) return JSON.stringify({ error: `Not supported on ${process.platform}` });
+
+  const raw = await execCommand(cmd, "startup_items");
+  const current = raw
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("===") && !l.startsWith("GUI login items") && l !== "(none)");
+
+  if (!existsSync(PERSIST_PATH)) {
+    await writeFile(PERSIST_PATH, JSON.stringify({ recorded: new Date().toISOString(), items: current }, null, 2));
+    return JSON.stringify({
+      status: "baseline_recorded",
+      total_items: current.length,
+      message: `Recorded ${current.length} startup agents and daemons as the baseline. From the next run onward this reports only what changed, which is the part worth reading.`,
+    });
+  }
+
+  const prior = JSON.parse(await readFile(PERSIST_PATH, "utf-8"));
+  const before: string[] = prior.items || [];
+  const added = current.filter((i) => !before.includes(i));
+  const removed = before.filter((i) => !current.includes(i));
+
+  await writeFile(PERSIST_PATH, JSON.stringify({ recorded: new Date().toISOString(), items: current }, null, 2));
+
+  return JSON.stringify({
+    status: "ok",
+    since: prior.recorded,
+    total_items: current.length,
+    added,
+    removed,
+    guidance: added.length
+      ? "New background agents appeared. Name each one, say which app it likely belongs to, and ask the user whether they installed that app recently. Anything they do not recognize should be treated as worth investigating, since this is how unwanted software persists."
+      : "No new startup agents since last check. Say so briefly, it is a genuinely good sign.",
+  }, null, 2);
+}
+
 async function handleSetupSchedule(params: { frequency: string }): Promise<string> {
   const { frequency } = params;
   const platform = process.platform;
@@ -163,6 +316,9 @@ const CUSTOM_HANDLERS: Record<string, (params: Record<string, unknown>) => Promi
   save_issues: handleSaveIssues,
   get_pending_issues: () => handleGetPendingIssues(),
   setup_schedule: (p) => handleSetupSchedule(p as { frequency: string }),
+  grant_consent: handleGrantConsent,
+  analyze_trends: () => handleAnalyzeTrends(),
+  check_persistence_changes: () => handlePersistenceChanges(),
 };
 
 export async function startServer() {
@@ -173,7 +329,7 @@ export async function startServer() {
   const agentMd = await readFile(agentMdPath, "utf-8");
 
   const server = new McpServer(
-    { name: "laptop-care", version: "0.4.0" },
+    { name: "laptop-care", version: "0.5.0" },
     { instructions: agentMd }
   );
 
@@ -194,24 +350,31 @@ export async function startServer() {
     const handler = CUSTOM_HANDLERS[tool.name];
     const hasParams = Object.keys(tool.schema).length > 0;
 
+    // Every tool routes through the consent interlock first.
+    const guard = async (run: () => Promise<string>): Promise<string> =>
+      isLocked(tool.name) ? LOCKED_RESPONSE : await run();
+
     if (handler) {
       if (hasParams) {
         server.tool(tool.name, tool.description, tool.schema, async (params: Record<string, unknown>) => ({
-          content: [{ type: "text" as const, text: await handler(params) }],
+          content: [{ type: "text" as const, text: await guard(() => handler(params)) }],
         }));
       } else {
         server.tool(tool.name, tool.description, async () => ({
-          content: [{ type: "text" as const, text: await handler({}) }],
+          content: [{ type: "text" as const, text: await guard(() => handler({})) }],
         }));
       }
     } else {
-      server.tool(tool.name, tool.description, async () => {
-        const cmd = getCommand(tool.name);
-        if (!cmd) {
-          return { content: [{ type: "text" as const, text: JSON.stringify({ error: `Not supported on ${process.platform}` }) }] };
-        }
-        return { content: [{ type: "text" as const, text: await execCommand(cmd, tool.name) }] };
-      });
+      server.tool(tool.name, tool.description, async () => ({
+        content: [{
+          type: "text" as const,
+          text: await guard(async () => {
+            const cmd = getCommand(tool.name);
+            if (!cmd) return JSON.stringify({ error: `Not supported on ${process.platform}` });
+            return await execCommand(cmd, tool.name);
+          }),
+        }],
+      }));
     }
   }
 

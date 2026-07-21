@@ -27,7 +27,9 @@ export const COMMANDS: Record<string, CommandEntry> = {
   },
 
   temp_files_clean: {
-    darwin: `rm -rf ~/Library/Caches/* ~/Library/Logs/*.log /tmp/com.apple.* 2>/dev/null; echo '{"status":"cleaned","targets":["~/Library/Caches/*","~/Library/Logs/*.log","/tmp/com.apple.*"]}'`,
+    // Measures before and after so the agent reports real reclaimed space
+    // instead of repeating its own estimate.
+    darwin: `before=$(du -sk ~/Library/Caches ~/Library/Logs 2>/dev/null | awk '{s+=$1} END {print s+0}'); rm -rf ~/Library/Caches/* ~/Library/Logs/*.log /tmp/com.apple.* 2>/dev/null; after=$(du -sk ~/Library/Caches ~/Library/Logs 2>/dev/null | awk '{s+=$1} END {print s+0}'); echo "{\\"status\\":\\"cleaned\\",\\"freed_mb\\":$(( (\${before:-0} - \${after:-0}) / 1024 )),\\"targets\\":[\\"~/Library/Caches\\",\\"~/Library/Logs\\",\\"/tmp/com.apple.*\\"]}"`,
     win32: `powershell -NoProfile -Command "Remove-Item $env:TEMP\\* -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item 'C:\\Windows\\Temp\\*' -Recurse -Force -ErrorAction SilentlyContinue; Write-Output '{\"status\":\"cleaned\",\"targets\":[\"$env:TEMP\",\"C:\\Windows\\Temp\"]}';"`,
   },
 
@@ -91,6 +93,11 @@ export const COMMANDS: Record<string, CommandEntry> = {
   system_integrity_check: {
     darwin: `diskutil verifyVolume / 2>&1`,
     win32: `powershell -NoProfile -Command "sfc /scannow 2>&1 | Select-String -Pattern 'Windows Resource Protection|found|could not'"`,
+  },
+
+  cache_breakdown: {
+    darwin: `{ echo "=== Cache by owner (largest first) ==="; du -sh ~/Library/Caches/* 2>/dev/null | sort -rh | head -15 || echo "(none)"; echo "=== Logs ==="; du -sh ~/Library/Logs/* 2>/dev/null | sort -rh | head -5 || echo "(none)"; }`,
+    win32: `powershell -NoProfile -Command "Get-ChildItem $env:LOCALAPPDATA -Directory -ErrorAction SilentlyContinue | ForEach-Object { $s=(Get-ChildItem $_.FullName -Recurse -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum; if($s -gt 100MB){[PSCustomObject]@{App=$_.Name;SizeMB=[math]::Round($s/1MB,0)}} } | Sort-Object SizeMB -Descending | Select-Object -First 15 | ConvertTo-Json"`,
   },
 
   empty_trash: {
