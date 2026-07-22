@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { readFile, appendFile, mkdir, writeFile, readdir } from "fs/promises";
-import { join, dirname } from "path";
+import { join, dirname, resolve as resolvePath } from "path";
 import { homedir } from "os";
 import { fileURLToPath } from "url";
 import { existsSync } from "fs";
@@ -280,6 +280,34 @@ async function handleListDisabledStartupItems(): Promise<string> {
   return JSON.stringify({ disabled: files, count: files.length, folder: QUARANTINE_DIR });
 }
 
+// Read-only drill-down. Lets the agent dig into any folder a level at a time
+// instead of only running the fixed top-level cache_breakdown. Deletes nothing.
+// Confined to the home directory so it cannot be pointed at other users or
+// system areas.
+async function handleInspectFolder(params: Record<string, unknown>): Promise<string> {
+  let path = String(params.path || "").trim();
+  if (path.startsWith("~")) path = join(homedir(), path.slice(1).replace(/^\//, ""));
+
+  const resolved = resolvePath(path);
+  const home = homedir();
+  if (resolved !== home && !resolved.startsWith(home + "/")) {
+    return JSON.stringify({ error: "OUT_OF_BOUNDS", message: `I only inspect folders inside your home directory. "${resolved}" is outside it.` });
+  }
+  if (!existsSync(resolved)) {
+    return JSON.stringify({ error: "NOT_FOUND", message: `No folder at ${resolved}.` });
+  }
+
+  // Immediate children by size, largest first. -d 1 keeps it one level deep so
+  // it stays fast and drillable rather than dumping the whole tree.
+  const cmd = `du -sh "${resolved}"/* "${resolved}"/.[!.]* 2>/dev/null | sort -rh | head -20`;
+  const out = await execCommand(cmd, "inspect_folder");
+  return JSON.stringify({
+    path: resolved,
+    breakdown: out.trim() || "(empty or unreadable)",
+    hint: "To go deeper, call inspect_folder again with the largest item's path. To recover space here, offer temp_files_clean only if this is a cache or log folder; files in Downloads or Documents are the user's real files and must not be auto-deleted.",
+  });
+}
+
 async function handleGrantConsent(params: Record<string, unknown>): Promise<string> {
   if (params.user_agreed !== true) {
     return JSON.stringify({
@@ -517,6 +545,7 @@ const CUSTOM_HANDLERS: Record<string, (params: Record<string, unknown>) => Promi
   disable_startup_item: handleDisableStartupItem,
   re_enable_startup_item: handleReEnableStartupItem,
   list_disabled_startup_items: () => handleListDisabledStartupItems(),
+  inspect_folder: handleInspectFolder,
 };
 
 export async function startServer() {
@@ -533,7 +562,7 @@ export async function startServer() {
   ]);
 
   const server = new McpServer(
-    { name: "laptop-care", version: "0.10.0" },
+    { name: "laptop-care", version: "0.11.0" },
     { instructions: kernel }
   );
 

@@ -43,6 +43,13 @@ export const TOOLS: ToolDef[] = [
     schema: EMPTY,
   },
   {
+    name: "inspect_folder",
+    description: "[AUTO-SAFE] Drill into any folder and break it down by what is inside, largest first. Read-only, deletes nothing. Use this when the user wants to dig deeper than the top-level cache_breakdown, for example 'what is in the 8 GB of caches' or 'what is taking up my Downloads'. You can point it at a cache subfolder, Downloads, Desktop, or any path under the home directory, and call it repeatedly to keep drilling down a level at a time.",
+    schema: {
+      path: z.string().describe("Absolute path or ~ path to inspect, e.g. ~/Library/Caches or ~/Library/Caches/com.spotify.client or ~/Downloads. Must be inside the home directory."),
+    },
+  },
+  {
     name: "analyze_trends",
     description: "[AUTO-SAFE] Compare the latest health check against this machine's own history and flag values that moved abnormally FOR THIS USER, rather than against generic thresholds. Use this on every returning run. It reports each metric's change since last check, the typical change for this machine, and marks anything moving faster than usual.",
     schema: EMPTY,
