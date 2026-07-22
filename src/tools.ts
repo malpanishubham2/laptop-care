@@ -19,6 +19,25 @@ export const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "disable_startup_item",
+    description: "[ASK-FIRST] Actually disable a login/startup item, rather than telling the user to do it themselves. Moves the item's launch agent file into a quarantine folder and unloads it, so it stops running at login. Fully reversible with re_enable_startup_item. Use this when the user agrees to remove something from the startup list. NEVER call it for anything that looks like a corporate security, MDM, antivirus, or device-management agent (names containing mdm, jamf, intune, crowdstrike, defender, sentinel, cisco, umbrella, netskope, zscaler), the user may not control those and disabling them can violate their employer's policy. Confirm the specific item with the user first.",
+    schema: {
+      plist_filename: z.string().describe("The launch agent filename to disable, e.g. com.bittorrent.uTorrent.plist. Must be a real filename from startup_items output, not a guess."),
+    },
+  },
+  {
+    name: "re_enable_startup_item",
+    description: "[ASK-FIRST] Undo a disable_startup_item. Moves a quarantined launch agent back and reloads it so it starts at login again. Use if the user changes their mind or something broke.",
+    schema: {
+      plist_filename: z.string().describe("The launch agent filename to restore, e.g. com.bittorrent.uTorrent.plist"),
+    },
+  },
+  {
+    name: "list_disabled_startup_items",
+    description: "[AUTO-SAFE] List startup items laptop-care has quarantined, so the user can see what was disabled and restore any of it.",
+    schema: EMPTY,
+  },
+  {
     name: "build_report_card",
     description: "[AUTO-SAFE] Generate the inspection report scaffold after finishing a diagnostic. Returns one row per check with a server-verified record of whether that check actually ran, plus the accurate tally. Call this before presenting results. You fill in the status and detail for rows that ran; you may not add rows, delete rows, or overwrite rows already marked 'Not checked'. Coverage comes from this tool, not from your own recollection of what you called.",
     schema: EMPTY,

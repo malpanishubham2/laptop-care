@@ -15,7 +15,14 @@ const CSV_PATH = join(DATA_DIR, "health.csv");
 const REPORTS_DIR = join(DATA_DIR, "reports");
 const ISSUES_PATH = join(DATA_DIR, "issues.json");
 const PERSIST_PATH = join(DATA_DIR, "persistence.json");
+const QUARANTINE_DIR = join(DATA_DIR, "disabled-startup");
+const USER_LAUNCH_AGENTS = join(homedir(), "Library", "LaunchAgents");
 const CSV_HEADER = "date,platform,disk_free_gb,disk_total_gb,battery_wear_pct,battery_cycles,ssd_health,firewall_on,encryption_on,pending_updates,uptime_days,is_deep_check";
+
+// Names that indicate a corporate, security, or device-management agent. The
+// server refuses to disable these regardless of what the model requests, since
+// the user may not control the machine and disabling them can breach policy.
+const PROTECTED_AGENTS = /mdm|jamf|intune|crowdstrike|defender|sentinel|falcon|cisco|umbrella|netskope|zscaler|carbonblack|cortex|tanium|kandji|kolide|osquery|nessus|managedclient|apple\.|com\.microsoft\.autoupdate/i;
 
 // --- Consent interlock ---
 // On a brand new install the scanning tools are locked in code, not just by
@@ -68,6 +75,10 @@ const REQUIRES: Record<string, { needs: string[]; why: string }> = {
   empty_trash: {
     needs: ["temp_files_scan"],
     why: "Run temp_files_scan first so you can tell the user how large the Trash is before emptying it.",
+  },
+  disable_startup_item: {
+    needs: ["startup_items"],
+    why: "Run startup_items first so you are disabling something that actually exists and can name it to the user before acting.",
   },
   save_report: {
     needs: ["disk_space"],
@@ -204,6 +215,69 @@ async function handleGetPendingIssues(): Promise<string> {
     (i) => i.status === "open" || i.status === "user-action-needed"
   );
   return JSON.stringify({ last_updated: data.last_updated, pending, total: data.issues.length });
+}
+
+// Actually disables a startup item instead of telling the user to. Reversible
+// by design: the launch agent is moved to a quarantine folder, never deleted,
+// and the corporate/security guard is enforced here in code, not just asked of
+// the model. Only touches user-level agents; system agents need root and are
+// out of scope on purpose.
+function sanitizePlistName(name: string): string | null {
+  // Reject path traversal and anything that is not a bare .plist filename.
+  if (!name || name.includes("/") || name.includes("..")) return null;
+  if (!name.endsWith(".plist")) return null;
+  return name;
+}
+
+async function handleDisableStartupItem(params: Record<string, unknown>): Promise<string> {
+  const raw = params.plist_filename as string;
+  const name = sanitizePlistName(raw);
+  if (!name) {
+    return JSON.stringify({ error: "INVALID_NAME", message: `"${raw}" is not a plain launch agent filename. Use a real name from startup_items, like com.example.helper.plist.` });
+  }
+  if (PROTECTED_AGENTS.test(name)) {
+    return JSON.stringify({ error: "PROTECTED_AGENT", message: `"${name}" looks like a corporate security or device-management agent. I will not disable it. If the user genuinely wants it gone they should go through their IT department.` });
+  }
+
+  const source = join(USER_LAUNCH_AGENTS, name);
+  if (!existsSync(source)) {
+    return JSON.stringify({ error: "NOT_FOUND", message: `No launch agent named "${name}" in ~/Library/LaunchAgents. It may be a system agent (needs admin, out of scope) or a GUI login item (Settings > General > Login Items).` });
+  }
+
+  await mkdir(QUARANTINE_DIR, { recursive: true });
+  // Unload first so it stops now, then move so it stays gone across reboots.
+  await execCommand(`launchctl unload "${source}" 2>/dev/null; true`, "disable_startup_item");
+  await execCommand(`mv "${source}" "${join(QUARANTINE_DIR, name)}"`, "disable_startup_item");
+
+  return JSON.stringify({
+    status: "disabled",
+    item: name,
+    reversible: true,
+    moved_to: join(QUARANTINE_DIR, name),
+    message: `Disabled ${name}. It is unloaded now and will not start at login. Nothing was deleted, it is in the quarantine folder and re_enable_startup_item restores it.`,
+  });
+}
+
+async function handleReEnableStartupItem(params: Record<string, unknown>): Promise<string> {
+  const name = sanitizePlistName(params.plist_filename as string);
+  if (!name) return JSON.stringify({ error: "INVALID_NAME", message: "Not a valid launch agent filename." });
+
+  const quarantined = join(QUARANTINE_DIR, name);
+  if (!existsSync(quarantined)) {
+    return JSON.stringify({ error: "NOT_QUARANTINED", message: `"${name}" is not in the quarantine folder. Only items laptop-care disabled can be re-enabled this way.` });
+  }
+
+  const dest = join(USER_LAUNCH_AGENTS, name);
+  await execCommand(`mv "${quarantined}" "${dest}"`, "re_enable_startup_item");
+  await execCommand(`launchctl load "${dest}" 2>/dev/null; true`, "re_enable_startup_item");
+
+  return JSON.stringify({ status: "re_enabled", item: name, message: `Restored ${name}. It will start at login again.` });
+}
+
+async function handleListDisabledStartupItems(): Promise<string> {
+  if (!existsSync(QUARANTINE_DIR)) return JSON.stringify({ disabled: [], message: "Nothing has been disabled." });
+  const files = (await readdir(QUARANTINE_DIR)).filter((f) => f.endsWith(".plist"));
+  return JSON.stringify({ disabled: files, count: files.length, folder: QUARANTINE_DIR });
 }
 
 async function handleGrantConsent(params: Record<string, unknown>): Promise<string> {
@@ -440,6 +514,9 @@ const CUSTOM_HANDLERS: Record<string, (params: Record<string, unknown>) => Promi
   analyze_trends: () => handleAnalyzeTrends(),
   check_persistence_changes: () => handlePersistenceChanges(),
   build_report_card: () => handleBuildReportCard(),
+  disable_startup_item: handleDisableStartupItem,
+  re_enable_startup_item: handleReEnableStartupItem,
+  list_disabled_startup_items: () => handleListDisabledStartupItems(),
 };
 
 export async function startServer() {
@@ -456,7 +533,7 @@ export async function startServer() {
   ]);
 
   const server = new McpServer(
-    { name: "laptop-care", version: "0.9.1" },
+    { name: "laptop-care", version: "0.10.0" },
     { instructions: kernel }
   );
 

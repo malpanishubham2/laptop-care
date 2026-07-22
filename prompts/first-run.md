@@ -149,13 +149,19 @@ What I'd do about it
    a restart, so pick your moment. The two Command Line Tools updates
    are not urgent.
 
-4. Startup items, when you have time
-   This one is yours to judge. You have 49 background agents. Nothing
-   there is alarming, but CleanMyMac3 and Trend Micro Cleaner both
-   running is redundant, and VirtualBox, MySQL, and MAMP each keep
-   something resident whether or not you use them. I have recorded the
-   full list, so from the next check onward I will tell you when
-   something new appears rather than making you read all 49 again.
+4. Startup items, and I can actually turn these off for you
+   You have 49 background agents. Nothing there is alarming, but
+   CleanMyMac3 and Trend Micro Cleaner both running is redundant, and
+   VirtualBox, MySQL, and MAMP each keep something resident whether or
+   not you use them. If you want any of these gone, name them and I
+   will disable them with disable_startup_item. It moves the item to a
+   quarantine folder and unloads it, so it is fully reversible, nothing
+   is deleted, and I can put any of it back. I have recorded the full
+   list, so from the next check onward I will only flag what is new.
+
+   Do not offer to disable anything that looks like a work security or
+   management agent. If the user asks, the server will refuse it anyway
+   and you should tell them that is their IT department's call.
 
 5. Regular checkups
    I can set this up now. Monthly suits most people. Pick weekly,
