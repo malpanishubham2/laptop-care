@@ -3,6 +3,10 @@
 Versions marked (npm) were published to the registry. Unmarked versions were
 folded into the next published release.
 
+## 0.12.0 (built, not yet published)
+- inspect_folder now works on Windows too (PowerShell folder-size breakdown), not just macOS. Fixed the injection guard so it stops blocking legitimate Windows paths, which contain backslashes.
+- disable_startup_item and re_enable_startup_item now return an honest "not on Windows yet" message pointing the user to Task Manager > Startup, instead of failing silently. Windows startup lives in the registry, and auto-editing it needs a proper reversible mechanism before it ships.
+
 ## 0.11.1 (built, not yet published)
 - inspect_folder now works anywhere on the machine, not just the home directory. A disk-space problem often lives in /Applications or /Library, and the user has every right to see what is using space on their own machine. Still read-only, and now rejects shell metacharacters in the path so du stays injection-safe.
 

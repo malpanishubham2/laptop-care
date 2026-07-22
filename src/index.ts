@@ -229,7 +229,21 @@ function sanitizePlistName(name: string): string | null {
   return name;
 }
 
+// Startup disabling is macOS-only for now. On macOS a launch agent is a single
+// file that can be moved aside and moved back, which is safe and reversible.
+// Windows startup lives across registry Run keys, the Startup folder, and Task
+// Scheduler; auto-editing the registry is risky enough that pointing the user
+// to the built-in Task Manager is the honest, safe answer until it is built
+// properly.
+function windowsStartupUnsupported(): string {
+  return JSON.stringify({
+    error: "NOT_ON_WINDOWS",
+    message: "I don't disable Windows startup items automatically yet, since they live in the registry and I won't edit that without a proper reversible mechanism. Tell the user to open Task Manager, go to the Startup apps tab, and toggle the item off there. It's one click and fully reversible.",
+  });
+}
+
 async function handleDisableStartupItem(params: Record<string, unknown>): Promise<string> {
+  if (process.platform === "win32") return windowsStartupUnsupported();
   const raw = params.plist_filename as string;
   const name = sanitizePlistName(raw);
   if (!name) {
@@ -259,6 +273,7 @@ async function handleDisableStartupItem(params: Record<string, unknown>): Promis
 }
 
 async function handleReEnableStartupItem(params: Record<string, unknown>): Promise<string> {
+  if (process.platform === "win32") return windowsStartupUnsupported();
   const name = sanitizePlistName(params.plist_filename as string);
   if (!name) return JSON.stringify({ error: "INVALID_NAME", message: "Not a valid launch agent filename." });
 
@@ -289,9 +304,11 @@ async function handleInspectFolder(params: Record<string, unknown>): Promise<str
   let path = String(params.path || "").trim();
   if (path.startsWith("~")) path = join(homedir(), path.slice(1).replace(/^\//, ""));
 
-  // A real folder path never contains these. Rejecting them keeps the du
-  // command below safe from injection without limiting where the user can look.
-  if (/[`$;|&<>\n"'\\]/.test(path)) {
+  // Reject characters that could break out of the shell command. Windows paths
+  // legitimately contain backslashes and colons, so the guard is looser there;
+  // the command quotes the path either way. On Unix backslash and $ are blocked.
+  const dangerous = process.platform === "win32" ? /['"`;|&<>\n]/ : /[`$;|&<>\n"'\\]/;
+  if (dangerous.test(path)) {
     return JSON.stringify({ error: "INVALID_PATH", message: "That path contains characters I do not run in a shell command. Give me a plain folder path." });
   }
 
@@ -300,9 +317,11 @@ async function handleInspectFolder(params: Record<string, unknown>): Promise<str
     return JSON.stringify({ error: "NOT_FOUND", message: `No folder at ${resolved}.` });
   }
 
-  // Immediate children by size, largest first. -d 1 keeps it one level deep so
-  // it stays fast and drillable rather than dumping the whole tree.
-  const cmd = `du -sh "${resolved}"/* "${resolved}"/.[!.]* 2>/dev/null | sort -rh | head -20`;
+  // Immediate children by size, largest first. One level deep so it stays fast
+  // and drillable rather than dumping the whole tree.
+  const cmd = process.platform === "win32"
+    ? `powershell -NoProfile -Command "Get-ChildItem -LiteralPath '${resolved}' -Force -ErrorAction SilentlyContinue | ForEach-Object { $b = if ($_.PSIsContainer) { (Get-ChildItem $_.FullName -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum } else { $_.Length }; [PSCustomObject]@{ SizeMB = [math]::Round(($b)/1MB,1); Name = $_.Name } } | Sort-Object SizeMB -Descending | Select-Object -First 20 | Format-Table -HideTableHeaders -AutoSize | Out-String"`
+    : `du -sh "${resolved}"/* "${resolved}"/.[!.]* 2>/dev/null | sort -rh | head -20`;
   const out = await execCommand(cmd, "inspect_folder");
   return JSON.stringify({
     path: resolved,
@@ -565,7 +584,7 @@ export async function startServer() {
   ]);
 
   const server = new McpServer(
-    { name: "laptop-care", version: "0.11.1" },
+    { name: "laptop-care", version: "0.12.0" },
     { instructions: kernel }
   );
 
