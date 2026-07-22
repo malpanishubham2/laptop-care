@@ -44,9 +44,9 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: "inspect_folder",
-    description: "[AUTO-SAFE] Drill into any folder and break it down by what is inside, largest first. Read-only, deletes nothing. Use this when the user wants to dig deeper than the top-level cache_breakdown, for example 'what is in the 8 GB of caches' or 'what is taking up my Downloads'. You can point it at a cache subfolder, Downloads, Desktop, or any path under the home directory, and call it repeatedly to keep drilling down a level at a time.",
+    description: "[AUTO-SAFE] Drill into any folder anywhere on the machine and break it down by what is inside, largest first. Read-only, measures sizes only, deletes nothing. Use this whenever the user wants to know what is taking up space, at any level. Point it at a cache subfolder, Downloads, /Applications, /Library, /private/var/log, wherever the space might be, and call it repeatedly to keep drilling down. Folders that need admin will simply skip what they cannot read rather than failing.",
     schema: {
-      path: z.string().describe("Absolute path or ~ path to inspect, e.g. ~/Library/Caches or ~/Library/Caches/com.spotify.client or ~/Downloads. Must be inside the home directory."),
+      path: z.string().describe("Absolute path or ~ path to inspect, e.g. ~/Library/Caches/com.spotify.client, /Applications, or /Library/Caches. Any real folder path works."),
     },
   },
   {

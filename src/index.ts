@@ -281,18 +281,21 @@ async function handleListDisabledStartupItems(): Promise<string> {
 }
 
 // Read-only drill-down. Lets the agent dig into any folder a level at a time
-// instead of only running the fixed top-level cache_breakdown. Deletes nothing.
-// Confined to the home directory so it cannot be pointed at other users or
-// system areas.
+// instead of only running the fixed top-level cache_breakdown. Deletes nothing,
+// only measures sizes, so it can go anywhere on the machine the user asks. The
+// only guard is against shell metacharacters, since the path goes into a du
+// command; folders needing root just report what they can and skip the rest.
 async function handleInspectFolder(params: Record<string, unknown>): Promise<string> {
   let path = String(params.path || "").trim();
   if (path.startsWith("~")) path = join(homedir(), path.slice(1).replace(/^\//, ""));
 
-  const resolved = resolvePath(path);
-  const home = homedir();
-  if (resolved !== home && !resolved.startsWith(home + "/")) {
-    return JSON.stringify({ error: "OUT_OF_BOUNDS", message: `I only inspect folders inside your home directory. "${resolved}" is outside it.` });
+  // A real folder path never contains these. Rejecting them keeps the du
+  // command below safe from injection without limiting where the user can look.
+  if (/[`$;|&<>\n"'\\]/.test(path)) {
+    return JSON.stringify({ error: "INVALID_PATH", message: "That path contains characters I do not run in a shell command. Give me a plain folder path." });
   }
+
+  const resolved = resolvePath(path);
   if (!existsSync(resolved)) {
     return JSON.stringify({ error: "NOT_FOUND", message: `No folder at ${resolved}.` });
   }
@@ -562,7 +565,7 @@ export async function startServer() {
   ]);
 
   const server = new McpServer(
-    { name: "laptop-care", version: "0.11.0" },
+    { name: "laptop-care", version: "0.11.1" },
     { instructions: kernel }
   );
 
